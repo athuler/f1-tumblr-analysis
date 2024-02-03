@@ -1,8 +1,7 @@
 {
 	"abu dhabi gp 2023":{
-		"start_weekend_timestamp": 123,
-		"end_weekend_timestamp": 123,
-		"start_quali_timestamp":123,
+		"start_race_timestamp": 1701003600,
+		"end_race_timestamp": 1701010800,
 		"race_tags":[
 			"abu dhabi gp 2023",
 		]
