@@ -3,13 +3,15 @@
 		"year": 2023,
 		"emoji":"🇦🇪",
 		"timestamps":{
-			"start": 1701003600,
-			"end": 1701003600,
+			"GP_start": 1701003600,
+			"GP_end": 1701003600,
 			"race_start": 1701003600,
 			"race_end": 1701010800
 		},
+		"table_name":"abu dhabi gp 2023",
 		"gp_tags":[
-			"abu dhabi gp 2023"
+			"abu dhabi gp 2023",
+			"abu dhabi gp"
 		]
 	}
 }
