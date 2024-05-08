@@ -137,3 +137,38 @@ def fetchPostsForGP(race, delay = 500):
                 end="\r"
             )
             sleep(delay / 1000)
+
+def raceSummary(race, endTime = 1701010800, startTime = 1701003600, resolution = 5):
+    
+    # Get Data
+    c.execute('select * from "' + race + '" WHERE "timestamp" >= ? AND "timestamp" <= ?',(startTime, endTime))
+    data = c.fetchall()
+    timestamps = []
+    for row in data:
+        timestamps.append(row[1])
+   
+    
+    
+    # Plot Time Chart
+    dates=[datetime.datetime.fromtimestamp(ts) for ts in timestamps]
+    datenums=md.date2num(dates)
+    xfmt = md.DateFormatter('%H:%M')
+    plt.figure(figsize=(10,6))
+    plt.title(race.title() + " (" + str(resolution) +" min resolution)")
+    plt.ylabel("# of Tumblr Posts")
+    ax=plt.gca()
+    ax.xaxis.set_major_formatter(xfmt)
+    plt.hist(datenums, bins=int(120/resolution))
+    plt.show()
+    
+    
+    # Per-minute Frequency
+    wordFreqMinute = np.histogram(
+        timestamps,
+        bins=range(
+            min(timestamps)-min(timestamps)%60, # Get start of the minute
+            max(timestamps) + 60,
+            60
+        )
+    )
+    print(wordFreqMinute)
