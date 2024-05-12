@@ -1,7 +1,8 @@
 import sqlite3
 import requests
 import json
-import datetime
+import sys
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
 from time import sleep
@@ -24,6 +25,14 @@ global c
 conn = sqlite3.connect('f1_tumblr_analysis.db')
 c = conn.cursor()
 
+
+# Define Additional Tags
+additionalTags = [
+	"formula 1",
+	"f1",
+	"formula1",
+	"f1blr"
+]
 
 
 
@@ -60,32 +69,62 @@ def getPostsToTimestamp(
 	APIResponse = requests.get(url)
 	APIResponse = APIResponse.json()
 	
+	# Check Status
+	if(APIResponse["meta"]["status"] != 200):
+		print("ERROR IN REQUEST")
+		print(json.dumps(APIResponse, indent=4))
+		sys.exit("Status code of response was not 200")
+	
 	
 	# Compute and print statistics about current batch of posts
 	num_posts = len(APIResponse["response"])
+	
+	if num_posts == 0:
+		return None
+	
 	first_timestamp = APIResponse["response"][0]["timestamp"]
 	last_timestamp = APIResponse["response"][-1]["timestamp"]
+	
+	if(first_timestamp == last_timestamp):
+		last_timestamp -= 1
+	
 	if debug:
 		print(
-			first_timestamp,"->", last_timestamp,
+			"\n", last_timestamp,"->",first_timestamp,
 			"(",round((first_timestamp-last_timestamp)/60,1), "min |",
-			round(num_posts/(first_timestamp-last_timestamp)*60,1), "posts/min)\n"
+			round(num_posts/(first_timestamp-last_timestamp)*60,1), "posts/min)"
 		)
 	
 	
 	# Iterate through each post
 	for post in APIResponse["response"]:
 		
+		if "trail" not in post:
+			print("Skipping post without trail")
+			continue
+		
+		# Ignore Empty Posts
+		if post['trail'] == []:
+			print("Skipping empty post")
+			continue
+		
+		if debug:
+			#print(json.dumps(post, indent=4))
+			...
+		
 		# Save Post Data
 		post_content_raw = post['trail'][0]["content_raw"]
-		post_url = post["post_url"]
+		#post_content_raw = post['body']
+		post_url = post["short_url"]
 		post_author = post["blog_name"]
 		post_timestamp = post["timestamp"]
 		post_id = post["id"]
 		post_tags = post["tags"]
 		
 		if debug:
-			print(post_timestamp,"\t", post_author,"\t", )
+			print(post_timestamp,"\t", post_author,"\t", post_url)
+		
+		
 		
 		# Check If Post Already in DB
 		c.execute('select * from "' + tableName + '" where id=?', (post_id,))
@@ -107,6 +146,11 @@ def getPostsToTimestamp(
 	
 		conn.commit()
 	
+	if debug:
+		#print(json.dumps(APIResponse, indent=4))
+		...
+	
+	
 	return(last_timestamp)
 
 
@@ -114,7 +158,7 @@ def getPostsToTimestamp(
 
 def getPostsForGP(
 	race,
-	section = "GP",
+	session = "fp1",
 	delay = 300,
 	debug = False
 ):
@@ -122,23 +166,30 @@ def getPostsForGP(
 	Fetches all posts for a GP
 	--
 	Input: GP name
-	Output: None
+	Output: Number of Posts
 	'''
 	
 	# Get GP Start & End Time
-	startTime = GP_DATA[race]["timestamps"][section + "_start"]
-	endTime = GP_DATA[race]["timestamps"][section + "_end"]
+	startTime = GP_DATA[race]["timestamps"][session + "_start"]
+	endTime = GP_DATA[race]["timestamps"][session + "_end"]
 	tableName = GP_DATA[race]["table_name"]
 	
 	
+	
+	
+	
+	
 	# Build Tag List
-	tags = ["formula 1", "f1", "formula1"]
+	tags = additionalTags.copy()
 	for additionalTag in GP_DATA[race]["gp_tags"]:
 		tags.append(additionalTag)
 	
 	for tag in tags:
 		nextTimeStamp = endTime
 		print("Current tag:", tag)
+		
+		c.execute('select COUNT(*) as post_count from "' + tableName + '"')
+		postsBeforeCurrentTag = c.fetchone()[0]
 		
 		while (nextTimeStamp >= startTime):
 
@@ -149,20 +200,36 @@ def getPostsForGP(
 									replace = True,
 									debug = debug
 							)
+			if(nextTimeStamp == None):
+				print("No Posts")
+				postCount = 0
+				break
+			
 			c.execute('select COUNT(*) as post_count from "' + tableName + '"')
+			postCount = c.fetchone()[0]
 			print(
 				str(round((endTime-nextTimeStamp)/(endTime-startTime)*100,2)) + \
-				"% (" + str(c.fetchone()[0]) +\
-				" total posts for "+section+")",
+				"% (" + str(postCount) +\
+				" total posts for "+session+")",
 				end="\r"
 			)
 			sleep(delay / 1000)
+		
+		#print(str(postCount - postsBeforeCurrentTag) + " posts")
+		
 		print("____________________________________________", end="\r")
+		
+	return(postCount)
 
 
 
 
-def raceSummary(race, endTime = 1701010800, startTime = 1701003600, resolution = 5):
+def raceSummary(
+	race,
+	endTime = 1701010800,
+	startTime = 1701003600,
+	resolution = 5
+):
 	
 	# Get Data
 	c.execute('select * from "' + race + '" WHERE "timestamp" >= ? AND "timestamp" <= ?',(startTime, endTime))
@@ -174,7 +241,7 @@ def raceSummary(race, endTime = 1701010800, startTime = 1701003600, resolution =
 	
 	
 	# Plot Time Chart
-	dates=[datetime.datetime.fromtimestamp(ts) for ts in timestamps]
+	dates=[datetime.fromtimestamp(ts) for ts in timestamps]
 	datenums=md.date2num(dates)
 	xfmt = md.DateFormatter('%H:%M')
 	plt.figure(figsize=(10,6))
@@ -197,3 +264,159 @@ def raceSummary(race, endTime = 1701010800, startTime = 1701003600, resolution =
 	)
 	print(wordFreqMinute)
 
+
+
+def loadSeasonFromWeb(
+	season = 2023,
+	debug = False
+):
+	"""
+	Given a season, gets the data for the races and loads them in the JSON file
+	"""
+	
+	# Only Accept Seasons Between 2018 and 2024
+	if(season < 2018 or season > 2024):
+		return None
+	
+	# Get Race Data For Season
+	url = "https://github.com/sportstimes/f1/raw/main/_db/f1/"+str(season)+".json"
+	response = requests.get(url)
+	roughRaceData = response.json()["races"]
+	
+	
+	
+	
+	newRaceData = {}
+	
+	# Load Each Race
+	for race in roughRaceData:
+		
+		slugWithYear = str(season) + "-" + race["slug"]
+		
+		# Save Current Race
+		newRaceData[slugWithYear] = {
+			"year" : season,
+			"round" : race["round"],
+			"name" : race["name"],
+			"location" : race["location"],
+			"emoji" : "",
+			"table_name" : slugWithYear,
+			"timestamps" : {},
+			"gp_tags" : [
+				race["name"].lower() + " gp " + str(season),
+				race["name"].lower() + " gp",
+				race["location"].lower() + " " + str(season),
+				race["location"].lower() + " gp " + str(season)
+			]
+		}
+		
+		# Add US GP Tag Where Appropriate
+		if(race["name"].lower() == "united states"):
+			newRaceData[slugWithYear]["gp_tags"].append("us gp " + str(season))
+			newRaceData[slugWithYear]["gp_tags"].append("us gp")
+		
+		if debug:
+			print("Race #" + str(race["round"]))
+			print(race["name"] + " / " + race["location"])
+			print(race["slug"])
+		
+		# Load Each Session
+		for session, startTimeOg in race["sessions"].items():
+			
+			# Determine Session Length
+			if("gp" in session):
+				sessionLength = 120
+			else:
+				sessionLength = 60
+			
+			
+			# Convert to DateTime
+			startTime = datetime.fromisoformat(startTimeOg.replace("Z","+00:00"))
+			endTime = startTime + timedelta(minutes=sessionLength)
+			
+			if debug:
+				print(session, int(startTime.timestamp()))
+			
+			# Add Session To Race
+			newRaceData[slugWithYear]["timestamps"][session + "_start"] = int(startTime.timestamp())
+			newRaceData[slugWithYear]["timestamps"][session + "_end"] = int(endTime.timestamp())
+		
+		
+		# Check if Table Exists
+		c.execute("SELECT * FROM sqlite_master WHERE type='table' AND name='"+slugWithYear+"';")
+		
+		# Create Table If It Doesn't Exist
+		if c.fetchone() == None:
+			c.execute("CREATE TABLE '"+slugWithYear+"' ('id'	INTEGER UNIQUE,	\"timestamp\"	INTEGER,\"url\"	TEXT,\"author\"	TEXT,\"content\"	TEXT,\"tags\"	TEXT,PRIMARY KEY(\"id\"))")
+		
+		if debug:
+			#print(json.dumps(race, indent=4))
+			print("")
+		
+	
+	# Load Current Race Data
+	with open('race_data.json', encoding='utf-8') as f:
+		raceData = json.load(f)
+	
+	# Preserve Existing Tags
+	for currentRace in newRaceData.keys():
+		if(currentRace not in raceData):
+			continue
+		
+		for tag in raceData[currentRace]["gp_tags"]:
+			if tag in newRaceData[currentRace]["gp_tags"]:
+				continue
+			newRaceData[currentRace]["gp_tags"].append(tag)
+		
+	# Remove Duplicate Tags
+	for currentRace in newRaceData.keys():
+		newRaceData[currentRace]["gp_tags"] = list(set(newRaceData[currentRace]["gp_tags"]))
+	
+	# Save JSON to file
+	with open('race_data.json', 'w', encoding='utf-8') as f:
+		json.dump(newRaceData, f, ensure_ascii=False, indent=4)
+	
+	return True
+	
+	
+def getPostsForSeason(
+	season = 2023,
+	session = "gp",
+	debug = False,
+	startAtRace = 1,
+	raceLimit = None,
+	delay = 1000
+):
+	
+	# Load Race Data
+	with open('race_data.json', encoding='utf-8') as f:
+		raceData = json.load(f)
+		
+	currentRaceNum = 0
+	started = False
+	
+	# Fetch Posts For Each Race
+	for currentRace, currentRaceData in raceData.items():
+		
+		currentRaceNum += 1
+		
+		if(currentRaceNum < startAtRace and started == False):
+			continue
+		elif(started == False):
+			currentRaceNum = 1
+			started = True
+		
+		if(raceLimit != None and currentRaceNum > raceLimit):
+			break
+		
+		# Only Consider Current Season
+		if(currentRaceData["year"] != season):
+			continue
+		
+		print("Fetching " + currentRace + " #"  + str(currentRaceData["round"]) + " (" + str(currentRaceData["timestamps"][session+"_start"]) + "-" + str(currentRaceData["timestamps"][session+"_end"]) + ")")
+		
+		# Fetch Post For Current Race
+		numPosts = getPostsForGP(currentRace, session = session, debug = debug, delay = delay)
+		
+		print(numPosts,"posts\n")
+	 
