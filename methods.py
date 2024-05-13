@@ -1,4 +1,5 @@
 import sqlite3
+import re
 import requests
 import json
 import sys
@@ -10,6 +11,22 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as md
 import numpy as np
 from scipy.signal import find_peaks_cwt
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.sentiment import SentimentIntensityAnalyzer
+
+# Download necessary NLTK resources
+nltk.download([
+	"names",
+	"stopwords",
+	"state_union",
+	"twitter_samples",
+	"movie_reviews",
+	"averaged_perceptron_tagger",
+	"vader_lexicon",
+	"punkt",
+])
 
 # Load API Key
 global API_KEY
@@ -66,7 +83,18 @@ def getPostsToTimestamp(
 	
 	
 	# Get Posts
-	APIResponse = requests.get(url)
+	fetching = True
+	while(fetching):
+		try:
+			APIResponse = requests.get(url)
+			fetching = False
+		except Exception as e:
+			if debug:
+				print(e)
+			print("Connection Reset. Reconnecting...")
+			fetching = True
+	
+	# Handle Response
 	APIResponse = APIResponse.json()
 	
 	# Check Status
@@ -140,7 +168,7 @@ def getPostsToTimestamp(
 		
 		# Add post to DB
 		c.execute(
-			'insert into "' + tableName + '" values (?,?,?,?,?,?)',
+			'insert into "' + tableName + '" values (?,?,?,?,?,?,0,0)',
 			(post_id, post_timestamp, post_url, post_author, post_content_raw, str(post_tags))
 		)
 	
@@ -158,8 +186,9 @@ def getPostsToTimestamp(
 
 def getPostsForGP(
 	race,
-	session = "fp1",
 	delay = 300,
+	replace = True,
+	startAtTag = None,
 	debug = False
 ):
 	'''
@@ -170,12 +199,12 @@ def getPostsForGP(
 	'''
 	
 	# Get GP Start & End Time
-	startTime = GP_DATA[race]["timestamps"][session + "_start"]
-	endTime = GP_DATA[race]["timestamps"][session + "_end"]
+	startTime = GP_DATA[race]["timestamps"]["fp1_start"] - 60 * 60 * 2
+	endTime = GP_DATA[race]["timestamps"]["gp_end"] + 60 * 60 * 2
 	tableName = GP_DATA[race]["table_name"]
 	
 	
-	
+	postCount = 0
 	
 	
 	
@@ -183,6 +212,13 @@ def getPostsForGP(
 	tags = additionalTags.copy()
 	for additionalTag in GP_DATA[race]["gp_tags"]:
 		tags.append(additionalTag)
+		
+	# Start At Designated Tag
+	if(startAtTag != None):
+		while(len(tags) > 0 and tags[0] != startAtTag):
+			print("Skipping tag", tags[0])
+			del tags[0]
+	
 	
 	for tag in tags:
 		nextTimeStamp = endTime
@@ -197,7 +233,7 @@ def getPostsForGP(
 									tableName = tableName,
 									tag = tag,
 									timestamp = nextTimeStamp,
-									replace = True,
+									replace = replace,
 									debug = debug
 							)
 			if(nextTimeStamp == None):
@@ -210,7 +246,7 @@ def getPostsForGP(
 			print(
 				str(round((endTime-nextTimeStamp)/(endTime-startTime)*100,2)) + \
 				"% (" + str(postCount) +\
-				" total posts for "+session+")",
+				" total posts for gp)",
 				end="\r"
 			)
 			sleep(delay / 1000)
@@ -347,7 +383,7 @@ def loadSeasonFromWeb(
 		
 		# Create Table If It Doesn't Exist
 		if c.fetchone() == None:
-			c.execute("CREATE TABLE '"+slugWithYear+"' ('id'	INTEGER UNIQUE,	\"timestamp\"	INTEGER,\"url\"	TEXT,\"author\"	TEXT,\"content\"	TEXT,\"tags\"	TEXT,PRIMARY KEY(\"id\"))")
+			c.execute("CREATE TABLE '"+slugWithYear+"' ('id'	INTEGER UNIQUE,	\"timestamp\"	INTEGER,\"url\"	TEXT,\"author\"	TEXT,\"content\"	TEXT,\"tags\"	TEXT,\"postLength\"	INTEGER,\"emotionScore\"	REAL,PRIMARY KEY(\"id\"))")
 		
 		if debug:
 			#print(json.dumps(race, indent=4))
@@ -381,23 +417,24 @@ def loadSeasonFromWeb(
 	
 def getPostsForSeason(
 	season = 2023,
-	session = "gp",
 	debug = False,
 	startAtRace = 1,
 	raceLimit = None,
-	delay = 1000
+	delay = 1000,
+	replace = False
 ):
 	
 	# Load Race Data
 	with open('race_data.json', encoding='utf-8') as f:
 		raceData = json.load(f)
 		
+	i = 0
 	currentRaceNum = 0
 	started = False
 	
 	# Fetch Posts For Each Race
 	for currentRace, currentRaceData in raceData.items():
-		
+		i += 1
 		currentRaceNum += 1
 		
 		if(currentRaceNum < startAtRace and started == False):
@@ -413,10 +450,103 @@ def getPostsForSeason(
 		if(currentRaceData["year"] != season):
 			continue
 		
-		print("Fetching " + currentRace + " #"  + str(currentRaceData["round"]) + " (" + str(currentRaceData["timestamps"][session+"_start"]) + "-" + str(currentRaceData["timestamps"][session+"_end"]) + ")")
+		print("Fetching " + currentRace + " #" + str(i) + " Round " + str(currentRaceData["round"]) + " (" + str(currentRaceData["timestamps"]["fp1_start"]) + "-" + str(currentRaceData["timestamps"]["gp_end"]) + ")")
 		
 		# Fetch Post For Current Race
-		numPosts = getPostsForGP(currentRace, session = session, debug = debug, delay = delay)
+		numPosts = getPostsForGP(
+			currentRace,
+			debug = debug,
+			replace = replace,
+			delay = delay
+		)
 		
 		print(numPosts,"posts\n")
-	 
+
+
+CLEANR = re.compile('<.*?>') 
+
+def cleanhtml(raw_html):
+	cleantext = re.sub(CLEANR, '', raw_html)
+	return cleantext.strip()
+		
+def get_emotion(text):
+	# Tokenize the text
+	tokens = word_tokenize(text.lower())
+
+	# Remove stopwords
+	stop_words = set(stopwords.words('english'))
+	filtered_tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
+
+	# Join tokens back into a single string
+	clean_text = ' '.join(filtered_tokens)
+
+	# Analyze sentiment
+	sid = SentimentIntensityAnalyzer()
+	scores = sid.polarity_scores(clean_text)
+
+	return scores
+		
+		
+def computePostLengthAndEmotionForRace(
+	race,
+	debug = False
+):
+	print("Computing Post Length & Sentiment for " + str(race))
+	
+	# Load Current Race Data
+	with open('race_data.json', encoding='utf-8') as f:
+		raceData = json.load(f)
+	tableName = raceData[race]["table_name"]
+	
+	# Check Table Formatting
+	c.execute('PRAGMA table_info("' + tableName + '")')
+	data = c.fetchall()
+	columnList = []
+	for row in data:
+		columnList.append(row[1])
+	
+	if("postLength" not in columnList):
+		c.execute('ALTER TABLE "' + tableName + '" ADD COLUMN postLength INTEGER;')
+		conn.commit()
+	
+	if("emotionScore" not in columnList):
+		c.execute('ALTER TABLE "' + tableName + '" ADD COLUMN emotionScore REAL;')
+		conn.commit()
+		
+	
+	# Get Data
+	c.execute('SELECT * FROM "' + tableName + '"')
+	data = c.fetchall()
+	
+	for postNum, row in enumerate(data):
+		
+		# Remove HTML Formatting
+		cleanPostContent = cleanhtml(row[4])
+		
+		# Get Post Length
+		postLength = len(cleanPostContent)
+		
+		# Get Post Emotion Score
+		postEmotionScore = get_emotion(cleanPostContent)["compound"]
+		
+		# Add These To The Database
+		c.execute(
+			'UPDATE "' + tableName + '" SET postLength = ?, emotionScore = ? WHERE id = ?',
+			(postLength, postEmotionScore, row[0])
+		)
+		
+		print(str(round(100*postNum/len(data),2)) + "%", end="\r")
+		
+		conn.commit()
+			
+def computePostLengthAndEmotionForSeason(
+	season = 2023,
+	debug = False
+):
+	# Load Race Data
+	with open('race_data.json', encoding='utf-8') as f:
+		raceData = json.load(f)
+	
+	# Compute For Each Race
+	for currentRace, currentRaceData in raceData.items():
+		computePostLengthAndEmotionForRace(currentRace, debug = debug)
