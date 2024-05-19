@@ -15,6 +15,7 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.sentiment import SentimentIntensityAnalyzer
+from dbMethods import *
 
 # Download necessary NLTK resources
 nltk.download([
@@ -36,11 +37,7 @@ API_KEY = json.loads(open("secret.json").read())["api_key"]
 global GP_DATA
 GP_DATA = json.loads(open("race_data.json").read())
 
-# Connect to DB
-global conn
-global c
-conn = sqlite3.connect('f1_tumblr_analysis.db')
-c = conn.cursor()
+
 
 
 # Define Additional Tags
