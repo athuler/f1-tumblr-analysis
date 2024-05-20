@@ -5,7 +5,12 @@ import json
 from dbMethods import *
 
 
-def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "emotion", debug = False):
+def ttestLengthAndEmotion(
+	BUFFER_BEFORE_CRASH,
+	BUFFER_AFTER_CRASH,
+	returning = "emotion",
+	debug = False
+):
 	
 	numSignificant = 0
 
@@ -32,8 +37,8 @@ def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "
 
 	for raceWithIncident, timestamps in redFlags2023.items():
 		
-		if debug:
-			print(raceWithIncident)
+		#if debug:
+			#print(raceWithIncident)
 
 		# Convert to UTC Timestamp
 		# And Add A Buffer Beforehand
@@ -55,8 +60,8 @@ def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "
 			(raceData[raceWithIncident]["timestamps"]["gp_start"], raceData[raceWithIncident]["timestamps"]["gp_end"])
 		)
 		data = c.fetchall()
-		if debug:
-			print(f"{len(data)} posts during race")
+		#if debug:
+			#print(f"{len(data)} posts during race")
 
 		for postNum, row in enumerate(data):
 			
@@ -78,7 +83,7 @@ def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "
 			
 			overallEmotionScore[category].append(row[7])
 			overallPostLengths[category].append(row[6])
-
+		"""
 		if debug:
 			print("Post Length: " + str(len(postLengths["crash"])) + " crash, " + str(len(postLengths["no crash"])) + " no crash")
 			print("Emotion Score: " + str(len(emotionScore["crash"])) + " crash, " + str(len(emotionScore["no crash"])) + " no crash")
@@ -87,7 +92,7 @@ def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "
 			print(f"\t- No Crash: {round(numpy.array(postLengths['no crash']).mean(),2)}")
 			print("Mean Emotion Score:")
 			print(f"\t- Crash: {round(numpy.array(emotionScore['crash']).mean(),2)}")
-			print(f"\t- No Crash: {round(numpy.array(emotionScore['no crash']).mean(),2)}")
+			print(f"\t- No Crash: {round(numpy.array(emotionScore['no crash']).mean(),2)}")"""
 		
 		"""
 		# Perform two-sample t-test
@@ -132,19 +137,19 @@ def ttestLengthAndEmotion(BUFFER_BEFORE_CRASH, BUFFER_AFTER_CRASH, returning = "
 			print("")"""
 	
 	if debug:
-		print("=============")
-		print("OVERALL STATS")
-		print("=============")
+		#print("=============")
+		#print("OVERALL STATS")
+		#print("=============")
 		
-		print("Mean Post Lengths:")
-		print(f"\t- Crash: {round(numpy.array(overallPostLengths['crash']).mean(),2)}")
-		print(f"\t- No Crash: {round(numpy.array(overallPostLengths['no crash']).mean(),2)}")
-		print("Mean Emotion Score:")
-		print(f"\t- Crash: {round(numpy.array(overallEmotionScore['crash']).mean(),2)}")
-		print(f"\t- No Crash: {round(numpy.array(overallEmotionScore['no crash']).mean(),2)}")
-		print("Mean Absolute Emotion Score:")
-		print(f"\t- Crash: {round(numpy.array([abs(ele) for ele in overallEmotionScore['crash']]).mean(),2)}")
-		print(f"\t- No Crash: {round(numpy.array([abs(ele) for ele in overallEmotionScore['no crash']]).mean(),2)}")
+		print("Mean Post Lengths (SD):")
+		print(f"\t- Crash: {round(numpy.array(overallPostLengths['crash']).mean(),2)} ({round(numpy.std(overallPostLengths['crash']),2)})")
+		print(f"\t- No Crash: {round(numpy.array(overallPostLengths['no crash']).mean(),2)} ({round(numpy.std(overallPostLengths['no crash']),2)})")
+		print("Mean Emotion Score: (SD)")
+		print(f"\t- Crash: {round(numpy.array(overallEmotionScore['crash']).mean(),2)} ({round(numpy.std(overallEmotionScore['crash']),2)})")
+		print(f"\t- No Crash: {round(numpy.array(overallEmotionScore['no crash']).mean(),2)} ({round(numpy.std(overallEmotionScore['no crash']),2)})")
+		print("Mean Absolute Emotion Score (SD):")
+		print(f"\t- Crash: {round(numpy.array([abs(ele) for ele in overallEmotionScore['crash']]).mean(),2)} ({round(numpy.std([abs(ele) for ele in overallEmotionScore['crash']]),2)})")
+		print(f"\t- No Crash: {round(numpy.array([abs(ele) for ele in overallEmotionScore['no crash']]).mean(),2)} ({round(numpy.std([abs(ele) for ele in overallEmotionScore['no crash']]),2)})")
 	
 	# Perform two-sample t-test
 	if debug:
@@ -218,7 +223,7 @@ def graphPValuePostCrash(
 		print(f"{currentBuffer}/{max(buffer_list)}",end="\r")
 	
 	plt.figure(figsize=(12,8))
-	plt.plot(buffer_list, significant_list)
+	plt.plot(buffer_list, significant_list, "red")
 	plt.title(caption)
 	plt.xlabel("Time After Crash (seconds)")
 	plt.show()
