@@ -3,7 +3,7 @@
 ########################
 #### Connect to DB  ####
 ########################
-$conn = new PDO('sqlite:f1_tumblr_analysis.db');
+$conn = new PDO('sqlite:postDb.db');
 
 
 ########################
