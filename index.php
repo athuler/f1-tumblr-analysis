@@ -190,6 +190,7 @@ foreach ($raceData as $currentRace => $currentRaceData) {
 				marker: {
 					color: 'rgb(141, 224, 125)'
 				},
+				opacity:0.5,
 				type: 'line'
 			},{
 				name: 'Avg Abs Emotion',
@@ -199,6 +200,7 @@ foreach ($raceData as $currentRace => $currentRaceData) {
 				marker: {
 					color: 'rgb(103, 34, 251)'
 				},
+				opacity:0.5,
 				type: 'line'
 			},{
 				name: 'Avg Emotion',
@@ -208,6 +210,7 @@ foreach ($raceData as $currentRace => $currentRaceData) {
 				marker: {
 					color: 'rgb(104, 2, 41)'
 				},
+				opacity:0.5,
 				type: 'line'
 			},];
 			
@@ -293,8 +296,8 @@ foreach ($raceData as $currentRace => $currentRaceData) {
 						y0: 0,
 						x1: '<?=date("Y-m-d H:m", $currentRaceData["timestamps"][$session . "_end"]);?>',
 						y1: 1,
-						fillcolor: 'rgb(233, 255, 195)',
-						opacity: 0.2,
+						fillcolor: 'rgb(200, 0, 0)',
+						opacity: 0.05,
 						line: {
 							width: 0
 						}
