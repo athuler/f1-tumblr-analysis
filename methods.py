@@ -486,6 +486,7 @@ def get_emotion(text):
 		
 def computePostLengthAndEmotionForRace(
 	race,
+	skip = True,
 	debug = False
 ):
 	print("Computing Post Length & Sentiment for " + str(race))
@@ -516,6 +517,10 @@ def computePostLengthAndEmotionForRace(
 	data = c.fetchall()
 	
 	for postNum, row in enumerate(data):
+		
+		# Skip if Already Computed
+		if(skip and row[6] != 0 and row[7] != 0):
+			continue
 		
 		# Remove HTML Formatting
 		cleanPostContent = cleanhtml(row[4])
